@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════╗
-║            fr-portx :: TCP Port Scanner               ║
+║            fr-portx :: TCP Port Scanner              ║
 ║   Author  : Alshifa Shaikh                           ║
 ║   Version : 1.0.0                                    ║
 ╚══════════════════════════════════════════════════════╝
 
-Usage:
+Usage (single host):
   python port_scanner.py -H 192.168.1.1 -p 1-1000
-  python port_scanner.py -H scanme.nmap.org -p 22,80,443,3306
-  python port_scanner.py -H 10.0.0.1 -p 1-65535 -t 300 --log results.txt
+  python port_scanner.py -H scanme.nmap.org -p 22,80,443
+
+Usage (multiple hosts — comma-separated):
+  python port_scanner.py -H "192.168.1.1,192.168.1.2,example.com" -p 22,80,443
+
+Usage (host list from file — one host per line):
+  python port_scanner.py -H hosts.txt -p 1-1000
+  python port_scanner.py -H hosts.txt -p 22,80,443 --log results.txt
 """
 
 import socket
@@ -41,7 +47,7 @@ BANNER = f"""
   ██╔══╝  ██╔══██╗    ██╔═══╝ ██║   ██║██╔══██╗   ██║    ██╔██╗ 
   ██║     ██║  ██║    ██║     ╚██████╔╝██║  ██║   ██║   ██╔╝ ██╗
   ╚═╝     ╚═╝  ╚═╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
-{C.RESET}{C.GREY}  fr-portx :: FR PORTX v1.0.0  |  by Alshifa Shaikh{C.RESET}
+{C.RESET}{C.GREY}  fr-portx :: FR PORTX v1.0.0  |  by Alshifa Shaikh  {C.RESET}
 """
 
 # ─── Common Port Services ────────────────────────────────────────────────────
@@ -54,6 +60,37 @@ COMMON_SERVICES = {
     6379: "Redis", 8080: "HTTP-Alt", 8443: "HTTPS-Alt",
     9200: "Elasticsearch", 27017: "MongoDB",
 }
+
+# ─── Host Parser (NEW) ───────────────────────────────────────────────────────
+def parse_hosts(host_arg: str) -> list[str]:
+    """
+
+
+    Parse host argument — three formats supported:
+      1. Single host:    "192.168.1.1"
+      2. Comma list:     "192.168.1.1,example.com,10.0.0.2"
+      3. File path:      "hosts.txt"  (one host per line, # lines are comments)
+    """
+    # Check if it's a file path
+    if os.path.isfile(host_arg):
+        hosts = []
+        with open(host_arg, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):   # skip blank/comment lines
+                    hosts.append(line)
+        if not hosts:
+            print(f"{C.RED}[!] Host file '{host_arg}' is empty or has only comments.{C.RESET}")
+            sys.exit(1)
+        print(f"{C.CYAN}[*] Loaded {len(hosts)} host(s) from file: {host_arg}{C.RESET}")
+        return hosts
+
+    # Comma-separated or single host
+    hosts = [h.strip() for h in host_arg.split(",") if h.strip()]
+    if not hosts:
+        print(f"{C.RED}[!] No valid hosts found in: {host_arg}{C.RESET}")
+        sys.exit(1)
+    return hosts
 
 # ─── Port Parser ─────────────────────────────────────────────────────────────
 def parse_ports(port_arg: str) -> list[int]:
@@ -78,24 +115,19 @@ def parse_ports(port_arg: str) -> list[int]:
     except ValueError as e:
         print(f"{C.RED}[!] Invalid port specification: {e}{C.RESET}")
         sys.exit(1)
-    return sorted(set(ports))  # deduplicate
+    return sorted(set(ports))
 
 # ─── Resolve Host ─────────────────────────────────────────────────────────────
-def resolve_host(host: str) -> str:
-    """Resolve hostname to IP, or validate IP"""
+def resolve_host(host: str) -> str | None:
+    """Resolve hostname to IP. Returns None on failure (for multi-host runs)."""
     try:
-        ip = socket.gethostbyname(host)
-        return ip
+        return socket.gethostbyname(host)
     except socket.gaierror as e:
-        print(f"{C.RED}[!] Could not resolve host '{host}': {e}{C.RESET}")
-        sys.exit(1)
+        print(f"{C.RED}[!] Could not resolve '{host}': {e}{C.RESET}")
+        return None
 
 # ─── Single Port Scan ─────────────────────────────────────────────────────────
 def scan_port(host: str, port: int, timeout: float) -> dict:
-    """
-    Scan a single TCP port.
-    Returns: {'port': int, 'status': 'open'|'closed'|'timeout', 'service': str}
-    """
     result = {
         "port": port,
         "status": "closed",
@@ -108,12 +140,11 @@ def scan_port(host: str, port: int, timeout: float) -> dict:
             conn = s.connect_ex((host, port))
             if conn == 0:
                 result["status"] = "open"
-                # Try banner grabbing
                 try:
                     s.settimeout(1.0)
                     banner = s.recv(1024).decode("utf-8", errors="ignore").strip()
                     if banner:
-                        result["banner"] = banner[:80]  # truncate long banners
+                        result["banner"] = banner[:80]
                 except Exception:
                     pass
             else:
@@ -131,12 +162,10 @@ def setup_logger(log_file: str | None) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     fmt = logging.Formatter("%(asctime)s  %(levelname)-8s  %(message)s",
                             datefmt="%Y-%m-%d %H:%M:%S")
-    # Console handler (WARNING+ only — we handle INFO ourselves for coloured output)
     ch = logging.StreamHandler()
     ch.setLevel(logging.WARNING)
     ch.setFormatter(fmt)
     logger.addHandler(ch)
-    # File handler
     if log_file:
         fh = logging.FileHandler(log_file, encoding="utf-8")
         fh.setLevel(logging.DEBUG)
@@ -164,43 +193,33 @@ def print_result(res: dict, verbose: bool = False):
     elif status == "error" and verbose:
         print(f"{C.RED}[ERROR  ]{C.RESET}  {port:<6}  {res.get('error','')}")
 
-# ─── Main Scanner ─────────────────────────────────────────────────────────────
-def run_scan(args):
-    print(BANNER)
-
-    host    = args.host
-    ports   = parse_ports(args.ports)
-    timeout = args.timeout
-    threads = args.threads
-    verbose = args.verbose
-    log_file= args.log
-
-    logger = setup_logger(log_file)
+# ─── Single Host Scan ─────────────────────────────────────────────────────────
+def scan_one_host(host: str, ports: list[int], args, logger) -> dict:
+    """Scan a single host. Returns summary dict."""
     ip = resolve_host(host)
+    if ip is None:
+        return {"host": host, "ip": None, "open": [], "error": "DNS failure"}
 
     total = len(ports)
     start_time = datetime.now()
 
+    print(f"\n{C.GREY}{'═'*60}{C.RESET}")
     print(f"{C.BOLD}  Target   :{C.RESET} {C.MAGENTA}{host}{C.RESET}  ({ip})")
-    print(f"{C.BOLD}  Ports    :{C.RESET} {total} ports  "
-          f"({min(ports)}–{max(ports)})")
-    print(f"{C.BOLD}  Threads  :{C.RESET} {threads}")
-    print(f"{C.BOLD}  Timeout  :{C.RESET} {timeout}s per port")
-    if log_file:
-        print(f"{C.BOLD}  Log File :{C.RESET} {log_file}")
+    print(f"{C.BOLD}  Ports    :{C.RESET} {total} ports  ({min(ports)}–{max(ports)})")
+    print(f"{C.BOLD}  Threads  :{C.RESET} {args.threads}")
+    print(f"{C.BOLD}  Timeout  :{C.RESET} {args.timeout}s per port")
     print(f"\n{C.GREY}{'─'*60}{C.RESET}")
     print(f"  {'PORT':<8}{'STATUS':<10}{'SERVICE'}")
     print(f"{C.GREY}{'─'*60}{C.RESET}\n")
 
-    logger.info(f"Scan started → host={host} ({ip}), ports={total}, "
-                f"threads={threads}, timeout={timeout}s")
+    logger.info(f"Scan started → host={host} ({ip}), ports={total}")
 
     results = {"open": [], "closed": [], "timeout": [], "error": []}
     completed = 0
 
-    with ThreadPoolExecutor(max_workers=threads) as executor:
+    with ThreadPoolExecutor(max_workers=args.threads) as executor:
         futures = {
-            executor.submit(scan_port, ip, port, timeout): port
+            executor.submit(scan_port, ip, port, args.timeout): port
             for port in ports
         }
         for future in as_completed(futures):
@@ -209,18 +228,13 @@ def run_scan(args):
                 res = future.result()
             except Exception as e:
                 port = futures[future]
-                res = {"port": port, "status": "error", "service": "unknown",
-                       "error": str(e)}
+                res = {"port": port, "status": "error", "service": "unknown", "error": str(e)}
 
             status = res["status"]
             results[status].append(res)
+            print_result(res, args.verbose)
+            logger.debug(f"host={host} port={res['port']} status={status}")
 
-            # Print progress
-            print_result(res, verbose)
-            logger.debug(f"port={res['port']} status={status} "
-                         f"service={res['service']}")
-
-            # Live progress bar (overwrite same line)
             pct = int((completed / total) * 40)
             bar = f"[{'█'*pct}{'░'*(40-pct)}] {completed}/{total}"
             print(f"\r{C.GREY}  {bar}{C.RESET}", end="", flush=True)
@@ -229,7 +243,6 @@ def run_scan(args):
     open_ports = results["open"]
 
     print(f"\n\n{C.GREY}{'─'*60}{C.RESET}")
-    print(f"\n{C.BOLD}{C.GREEN}  SCAN COMPLETE{C.RESET}")
     print(f"  ⏱  Elapsed  : {elapsed:.2f}s")
     print(f"  ✅ Open     : {C.GREEN}{len(open_ports)}{C.RESET}")
     print(f"  🔒 Closed   : {C.GREY}{len(results['closed'])}{C.RESET}")
@@ -237,43 +250,99 @@ def run_scan(args):
     print(f"  ⚠  Errors   : {C.RED}{len(results['error'])}{C.RESET}")
 
     if open_ports:
-        print(f"\n{C.BOLD}  Open Ports Summary:{C.RESET}")
+        print(f"\n{C.BOLD}  Open Ports:{C.RESET}")
         for r in sorted(open_ports, key=lambda x: x["port"]):
-            svc = r["service"]
             banner = f"  → {r['banner']}" if r.get("banner") else ""
-            print(f"    {C.GREEN}●{C.RESET}  {r['port']:<6} {C.CYAN}{svc}{C.RESET}{C.GREY}{banner}{C.RESET}")
+            print(f"    {C.GREEN}●{C.RESET}  {r['port']:<6} {C.CYAN}{r['service']}{C.RESET}{C.GREY}{banner}{C.RESET}")
 
-    if log_file:
-        print(f"\n{C.GREY}  Results logged → {log_file}{C.RESET}")
+    logger.info(f"host={host} done → open={len(open_ports)}, elapsed={elapsed:.2f}s")
 
-    logger.info(f"Scan complete → open={len(open_ports)}, "
-                f"closed={len(results['closed'])}, "
-                f"timeout={len(results['timeout'])}, "
-                f"elapsed={elapsed:.2f}s")
+    return {
+        "host": host,
+        "ip": ip,
+        "open": open_ports,
+        "closed": len(results["closed"]),
+        "timeout": len(results["timeout"]),
+        "elapsed": elapsed,
+    }
 
-    return results
+# ─── Main Runner ──────────────────────────────────────────────────────────────
+def run_scan(args):
+    print(BANNER)
+
+    hosts   = parse_hosts(args.host)
+    ports   = parse_ports(args.ports)
+    logger  = setup_logger(args.log)
+
+    if args.log:
+        print(f"{C.BOLD}  Log File :{C.RESET} {args.log}\n")
+
+    all_summaries = []
+
+    for i, host in enumerate(hosts, 1):
+        if len(hosts) > 1:
+            print(f"\n{C.CYAN}{C.BOLD}  ── Host {i}/{len(hosts)} ──{C.RESET}")
+        summary = scan_one_host(host, ports, args, logger)
+        all_summaries.append(summary)
+
+    # ── Final summary across all hosts ──
+    if len(hosts) > 1:
+        print(f"\n\n{C.CYAN}{C.BOLD}{'═'*60}")
+        print(f"  MULTI-HOST SCAN COMPLETE — {len(hosts)} hosts")
+        print(f"{'═'*60}{C.RESET}\n")
+        for s in all_summaries:
+            ip_str = f"({s['ip']})" if s.get("ip") else "(unresolved)"
+            if s.get("error"):
+                status_str = f"{C.RED}FAILED — {s['error']}{C.RESET}"
+                open_str   = ""
+            else:
+                open_count = len(s["open"])
+                color = C.GREEN if open_count > 0 else C.GREY
+                status_str = f"{color}{open_count} open port(s){C.RESET}"
+                ports_list = ", ".join(str(r["port"]) for r in s["open"])
+                open_str   = f"  {C.GREY}[{ports_list}]{C.RESET}" if ports_list else ""
+
+            print(f"  {C.MAGENTA}{s['host']:<30}{C.RESET} {ip_str:<18} {status_str}{open_str}")
+        print()
+
+    if args.log:
+        print(f"\n{C.GREY}  Results logged → {args.log}{C.RESET}")
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
         prog="port_scanner.py",
-        description="recon-x :: TCP Port Scanner",
+        description="fr-portx :: TCP Port Scanner  (v1.0 )",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Single host
   python port_scanner.py -H 192.168.1.1 -p 1-1000
-  python port_scanner.py -H scanme.nmap.org -p 22,80,443,3306,8080
-  python port_scanner.py -H 10.0.0.1 -p 1-65535 -t 500 --log scan.log -v
+
+  # Multiple hosts (comma-separated)
+  python port_scanner.py -H "scanme.nmap.org,example.com,192.168.1.1" -p 22,80,443
+
+  # Hosts from a file (one per line)
+  python port_scanner.py -H hosts.txt -p 22,80,443,3306,8080
+
+  # Full options
+  python port_scanner.py -H hosts.txt -p 1-65535 -t 500 --timeout 0.5 --log scan.log -v
+
+hosts.txt format:
+  # Lines starting with # are ignored
+  192.168.1.1
+  scanme.nmap.org
+  example.com
         """
     )
     parser.add_argument("-H", "--host",    required=True,
-                        help="Target host (IP or hostname)")
+                        help="Target: single IP/hostname, comma-separated list, or path to a file with one host per line")
     parser.add_argument("-p", "--ports",   required=True,
                         help="Ports: single (80), list (22,80,443), range (1-1024), mixed (22,80,1000-2000)")
     parser.add_argument("-t", "--threads", type=int, default=200,
                         help="Number of threads (default: 200)")
     parser.add_argument("--timeout",       type=float, default=1.0,
-                        help="Socket timeout in seconds (default: 1.0)")
+                        help="Socket timeout per port in seconds (default: 1.0)")
     parser.add_argument("--log",           metavar="FILE",
                         help="Log results to a file")
     parser.add_argument("-v", "--verbose", action="store_true",
