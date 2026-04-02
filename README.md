@@ -22,7 +22,7 @@
   ██║     ██║  ██║    ██║     ╚██████╔╝██║  ██║   ██║   ██╔╝ ██╗
   ╚═╝     ╚═╝  ╚═╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 
-  fr-portx :: FR PORTX v2.0.0  |  by Alshifa Shaikh  |  multi-host edition
+  fr-portx :: FR PORTX v1.0.0  |  by Alshifa Shaikh  
 
   [*] Loaded 3 host(s) from file: hosts.txt
 
