@@ -79,7 +79,7 @@
 git clone https://github.com/fairyknight-FR/FR-PortX.git
 
 # 2. Navigate into the folder
-cd fr-portx
+cd FR-PortX
 
 # 3. (Optional) Create a virtual environment
 python -m venv venv
@@ -176,7 +176,7 @@ example.com
 ## 📂 Project Structure
 
 ```
-fr-portx/
+FR-PortX/
 ├── port_scanner.py     # Main scanner script
 ├── hosts.txt           # (Optional) Host list file — one host per line
 ├── README.md           # Documentation
