@@ -280,21 +280,6 @@ When `--log` is used, results are saved in this format:
 
 ---
 
-## 🔄 Changelog
-
-### v2.0.0
-- ✅ **Multi-host scanning** — `-H` now accepts a comma-separated list or a file path
-- ✅ **hosts.txt support** — comment lines (`#`) and blank lines are skipped automatically
-- ✅ **Combined summary table** — all hosts and their open ports shown together after the scan
-- ✅ **Graceful DNS failure** — one failed host won't abort the entire scan
-- ✅ **Per-host progress** — each host gets its own progress bar and summary block
-- ✅ Renamed tool to `fr-portx` to match banner
-
-### v1.0.0
-- Initial release — single host scanning, banner grabbing, file logging, colored output
-
----
-
 ## ⚠️ Legal Disclaimer
 
 > This tool is intended **only for authorized security testing and educational purposes**.
@@ -318,4 +303,4 @@ This project is licensed under the **MIT License** — feel free to use, modify,
 
 ---
 
-<p align="center">Made with ❤️ for the cybersecurity community</p>
+<p align="center">Made with ❤️ by Alshifa Shaikh for the cybersecurity community</p>
