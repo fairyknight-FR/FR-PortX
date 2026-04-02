@@ -76,7 +76,7 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/fr-portx.git
+git clone https://github.com/fairyknight-FR/FR-PortX.git
 
 # 2. Navigate into the folder
 cd fr-portx
